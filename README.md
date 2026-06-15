@@ -4,15 +4,13 @@ You just sat through the "Day in the Life of a Solutions Architect" session. Thi
 
 You're going to build an actual AI agent: a program that reasons, picks tools, calls them, reads the results, and keeps going until it has an answer. Not a wrapper around a chat API. The real thing. This same pattern shows up in basically every AI product being shipped right now, and it's what you'll need for your capstone.
 
-By the end (about 30 minutes), you'll have built something you can explain from first principles. Not just run -- explain.
+One rule for this exercise: if you can't explain what you just built to someone who wasn't in the room, you haven't finished the step. That's the Feynman bar -- and it's the bar that matters on a real team.
 
 ---
 
-## Before you touch any code: build the mental model
+## The mental model (read before you touch anything)
 
-Read this. It takes 2 minutes and everything else depends on it.
-
-Most people assume AI is a black box. It isn't. Under every "agent" is a loop:
+Under every "agent" is a loop:
 
 ```
 user message
@@ -26,17 +24,13 @@ user message
   final answer
 ```
 
-Here's the part that surprises people: **the model doesn't run your tools. You do.** The model decides *when* to ask for a tool and *what arguments* to pass. Your code intercepts that request, runs the actual Python function, and feeds the result back.
+**The model doesn't run your tools. You do.** The model decides *when* to ask for a tool and *what arguments* to pass. Your code intercepts that, runs the Python function, and feeds the result back.
 
-Two files make this work:
-- `agent.py` -- the loop. Sends messages to the model, checks if it wants a tool, runs it, loops back.
-- `tools.py` -- the tool functions. Plain Python. The model never sees this code, only the description you write for it.
+This loop is built on a concept Anthropic calls **context engineering**: the model can only work with what's in its context window at any given moment -- the system prompt, the conversation history, tool results, everything. Every decision the agent makes is based entirely on what you've put in that window. You are the curator. Good agents are built by people who think carefully about what information the model needs, when it needs it, and what to leave out.
 
-Before you go further, answer this in your head:
-
-> If you gave the model a broken tool (one that always crashes), what would happen to the agent? Would it know the tool failed? How?
-
-Hold that question. You'll be able to answer it concretely by the end of Step 2.
+Two files make this work today:
+- `agent.py` -- the loop itself
+- `tools.py` -- the tool functions (plain Python) and their schemas (what the model reads to decide when to use them)
 
 ---
 
@@ -51,9 +45,9 @@ claude login
 
 **Get a Grok API key**
 
-Go to [console.x.ai](https://console.x.ai), sign in, click "API Keys" in the left sidebar, then "Create API Key". Copy it immediately -- it won't be shown again after you close the modal.
+Go to [console.x.ai](https://console.x.ai), sign in, click "API Keys" in the left sidebar, then "Create API Key". Copy it immediately -- it won't be shown again after you close that modal.
 
-No key yet? Add `USE_MOCK=1` to your `.env` after setup. The agent runs with a fake model. Real responses won't work but the loop does, and the architecture lesson is identical.
+No key yet? Add `USE_MOCK=1` to your `.env` after cloning. The agent runs with a fake model. The loop still works and the concepts are identical.
 
 **Clone and install**
 
@@ -67,7 +61,7 @@ source .venv/bin/activate     # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-You should see `Successfully installed openai` and `python-dotenv` near the end. If you see errors, check your Python version: `python --version` (needs 3.10+).
+Look for `Successfully installed openai` and `python-dotenv` at the end. If you see errors: `python --version` should say 3.10 or higher.
 
 **Add your key**
 
@@ -75,7 +69,7 @@ You should see `Successfully installed openai` and `python-dotenv` near the end.
 cp .env.example .env
 ```
 
-Open `.env` (VS Code: `code .env`, nano: `nano .env`) and paste your key into `XAI_API_KEY=`. Save the file.
+Open `.env` (VS Code: `code .env`, nano: `nano .env`) and paste your key into `XAI_API_KEY=`. Save.
 
 **Open Claude Code**
 
@@ -83,96 +77,77 @@ Open `.env` (VS Code: `code .env`, nano: `nano .env`) and paste your key into `X
 claude .
 ```
 
-You'll use Claude Code for the whole exercise. Leave this terminal open.
+You'll use Claude Code for the entire exercise.
 
 ---
 
-## Step 1 -- Read before you run (8 min)
+## Step 1 -- Understand the loop (8 min)
 
-### Understand
+### Read first
 
-Open `agent.py` and read it. Don't run anything yet. Read the `run_agent` function top to bottom.
+Open `agent.py` and read `run_agent` before running anything. Find the line that checks `if not msg.tool_calls`. That's the fork: one path ends the loop, the other continues it.
 
-Ask yourself:
-- Where does the loop start?
-- What is the `if not msg.tool_calls` check doing?
-- What gets added to `messages` each time a tool runs?
+Then open `tools.py`. `get_weather` returns a hardcoded string -- "68F and sunny" regardless of city or season. The model has no idea.
 
-Then open `tools.py`. Notice that `get_weather` is completely fake -- it returns a hardcoded string. The model doesn't know that.
-
-### Predict
-
-Before you run anything, write down (or just think through) your answer to this:
-
-> When you ask "what should I pack for Boston today?", the model will call `get_weather`. It'll get back a fake result that says "68F and sunny." What will the model do with that? Will it know the data is fake? Why or why not?
+**Quick question before you run:** when the model gets that fake result back, will it know it's fake? Why or why not?
 
 ### Build
 
-Paste this into Claude Code:
+Ask Claude Code:
 
-> *"Read agent.py and explain how the agent loop works -- specifically what happens at each iteration when the model wants to call a tool vs. when it gives a final answer. Then run the agent with 'what should I pack for Boston today?' and show me the full output."*
+> *"Read agent.py and explain how the agent loop works -- what happens when the model wants a tool vs. when it has a final answer. Then test it with a weather question for Boston and show me the full output."*
 
-### Reflect
+### The concept
 
-After you see the output, answer this before moving on:
+Look at what's in `messages` by the time the loop finishes. It started with a system prompt and a user message. Now it also has the tool call, the tool result, and the final answer -- all stacked up chronologically. That accumulating list *is* the context window. The model doesn't have memory between turns; it just has that list. Every response is generated from scratch based on everything in it.
 
-> The model called `get_weather` with `{'city': 'Boston'}`. You didn't tell it to use that exact city name -- you said "Boston" in your question. How did it know to pass `'Boston'` as the argument? Where does that decision happen?
+This is **thinking in layers**: system prompt at the base, conversation history building on top, tool results added as they come in. When you design an agent, you're designing what each layer contains.
+
+**Before moving on, explain in one sentence:** why does the model call `get_weather` before answering, instead of just answering from its training data?
 
 ---
 
 ## Step 2 -- Add a tool that writes (8 min)
 
-### Understand
+### Read first
 
-Right now the agent can only read (fake weather data). You're going to give it a way to write -- a `save_note` tool that appends to a file. But before you build it, think about what the agent needs to know about it.
+Look at `TOOL_SCHEMAS` in `tools.py`. The `description` field is the only thing the model reads to decide when to use a tool. The Python function is invisible to it.
 
-Open `tools.py` and look at how `get_weather` is defined. There are two parts: the Python function, and the schema in `TOOL_SCHEMAS`. The function is what actually runs. The schema is what the model reads to decide when and how to use it.
-
-### Predict
-
-> If you write a great Python function for `save_note` but write a vague schema description like "saves stuff", what do you think will happen when you ask the agent to save a weather summary?
+**Question before you build:** if you write a vague description like "saves stuff", what will the model do when you ask it to save a weather summary?
 
 ### Build
 
-Paste this into Claude Code -- but read it first and understand what you're asking for:
+Ask Claude Code:
 
-> *"Add a tool called save_note that takes a text argument and appends a timestamped line to notes.txt. Make sure the schema description is specific enough that the model knows exactly when to use it. Then ask the agent: 'Check the weather in Boston and save a one-line summary to my notes.' Show me what ends up in notes.txt."*
+> *"Add a tool called save_note that takes a text argument and appends a timestamped line to notes.txt. Write a specific schema description so the model knows exactly when to use it. Then ask the agent to check the weather in Boston and save a one-line summary to my notes. Show me what ends up in notes.txt."*
 
-### Reflect
+### The concept
 
-The agent called `get_weather` before `save_note`. You never programmed that order.
+The agent called `get_weather` first, then `save_note`. You never programmed that order. The model inferred it from the tool descriptions and the user's request -- that's **context engineering** working in practice. The description you wrote for each tool is the signal the model used to decide what to do and when.
 
-> How did it know to do that? What would have happened if it called `save_note` first?
-
-Now go back to the question from Step 1: if `save_note` threw an exception, would the agent know? Look at the `run_tool` function in `tools.py` and trace what actually happens when a tool fails.
+**Before moving on:** in `tools.py`, find `run_tool`. What happens if a tool throws an exception? Does the model get told about it? Trace it through the code.
 
 ---
 
 ## Step 3 -- Add guardrails (7 min)
 
-### Understand
+### Try it first
 
-You now have an agent that can read weather and write notes. Ask it something completely off-topic -- something like "write me a poem" or "what's the capital of France." Try it.
+Before building anything, ask the agent something completely off-topic -- "write me a poem" or "what's 2+2." See what it does.
 
-> What happened? Did it refuse? Did it try to help anyway? What does that tell you about the current system prompt?
-
-### Predict
-
-You're going to add two guardrails:
-1. The agent should refuse anything not related to weather or notes
-2. `save_note` should hard-reject text longer than 500 characters
-
-> Before you implement them: which one should live in the system prompt and which should live in Python code? Why can't both live in the prompt? What's the risk of putting the 500-character limit in the prompt instead of the code?
+**Question:** did it refuse or help anyway? What does that tell you about what's currently in the system prompt?
 
 ### Build
 
-Paste this into Claude Code:
+Ask Claude Code:
 
-> *"Add two guardrails: update the system prompt so the agent refuses requests outside of weather and notes, and add a hard character limit of 500 to save_note in the Python function -- it should return an error string if the limit is exceeded. After both are done, test both guardrails and show me the output for each."*
+> *"Add two guardrails: update the system prompt so the agent refuses anything not related to weather or notes, and add a hard 500-character limit inside the save_note function that returns an error if exceeded. Test both and show me the output."*
 
-### Reflect
+### The concept
 
-> If a clever user crafted a long message that gradually convinced the model the character limit didn't apply in this special case -- which guardrail would hold? Which would break? What does that tell you about where to put hard limits?
+You just put two limits in two different places on purpose. The system prompt limit is **behavioral** -- it shapes what the model wants to do. The code limit is **structural** -- it doesn't matter what the model wants, the function enforces it regardless.
+
+**Before moving on:** if a user sent a very long, persuasive message that slowly convinced the model the character limit didn't apply in this special case -- which guardrail would hold? Which would break? What does that tell you about where hard limits belong?
 
 ---
 
@@ -185,35 +160,35 @@ git config --global user.name "Your Name"
 git config --global user.email "you@example.com"
 ```
 
-Paste this into Claude Code:
+Ask Claude Code:
 
-> *"Fill in the 'What I built' section of the README. Write it as if you're explaining this agent to a new teammate who's never seen it -- what it does, what tools it has, where the guardrails live and why. Then commit all changes with a descriptive message."*
+> *"Fill in the 'What I built' section of the README. Write it as if you're explaining this agent to a teammate who wasn't here -- what it does, what tools it has, where the guardrails are and why they're there. Then commit everything with a descriptive message."*
 
-Before you commit, read what Claude Code wrote. If it doesn't match what you actually built, push back and correct it. You own this.
+Read what it writes before you accept it. If it doesn't match what you actually built, correct it. You own this.
 
 ---
 
-## Final check
+## Feynman check
 
-You should now be able to answer all of these without looking at the code:
+You should be able to answer all of these out loud, without looking at the code:
 
 1. What's the difference between a tool schema and a tool function? Who sees each one?
-2. Why does the agent loop keep going after a tool call instead of stopping?
-3. You want to add a guardrail that prevents the agent from saving notes with profanity. Where does that live -- prompt or code? Why?
+2. The model doesn't have memory between sessions. So how does it know what happened earlier in a conversation?
+3. You want a guardrail that blocks the agent from saving notes containing profanity. Prompt or code? Why?
 4. A teammate says "the AI is calling our database." What's actually happening?
 
-If any of these are fuzzy, go back to the step that covers it. These are the exact concepts that will come up in your capstone review.
+If any of these are fuzzy, go back to the step that covers it. These are the concepts that come up in capstone reviews.
 
 ---
 
 ## Stretch goals
 
-Done early? These go deeper, not just further:
+These go deeper, not just further:
 
-- **Break it intentionally.** Delete the description from `get_weather`'s schema (leave the function). Ask the agent a weather question. What happens and why? Restore it after.
-- **Real weather data.** Replace the hardcoded `get_weather` with a live call to [wttr.in](https://wttr.in) (no key needed: `curl wttr.in/Boston?format=3`). Now the fake data problem goes away.
-- **MCP server.** Run `claude mcp add fetch -- uvx mcp-server-fetch` then ask the agent to summarize a webpage. You just gave it a tool you didn't write.
-- **Write your own tool from scratch.** No hints. Pick something useful, write the function, write the schema, ask the agent to use it.
+- **Break it intentionally.** Delete the `description` field from `get_weather`'s schema (leave the function). Ask the agent a weather question. What happens? Restore it after. This is the fastest way to understand why schema descriptions matter.
+- **Real weather data.** Replace the hardcoded `get_weather` with a live call to [wttr.in](https://wttr.in) (no key: `curl wttr.in/Boston?format=3`).
+- **MCP server.** Run `claude mcp add fetch -- uvx mcp-server-fetch` and ask the agent to summarize a webpage. You just gave it a tool you didn't write.
+- **Build a tool from scratch.** No hints. Pick something useful, write the function and schema, ask the agent to use it.
 
 ---
 
