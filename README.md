@@ -68,11 +68,17 @@ Open `.env` and paste your key into `XAI_API_KEY`. Leave everything else alone.
 
 **Check that it works**
 
+Open Claude Code in this folder:
+
 ```bash
-python agent.py "what should I pack for Boston today?"
+claude .
 ```
 
-You should see `-> calling tool: get_weather({'city': 'Boston'})` in the output before the final answer. If that line shows up, the loop is running correctly.
+Then ask it to run the agent for you:
+
+> *"Run agent.py with the question 'what should I pack for Boston today?' and show me the output."*
+
+You should see `-> calling tool: get_weather({'city': 'Boston'})` in the output before the final answer. If that line shows up, the loop is running correctly. This is also your first taste of what the exercise feels like -- you're asking Claude Code to do things, not running commands yourself.
 
 Using OpenAI instead? Set `OPENAI_API_KEY` and change `PROVIDER=openai` in `.env`. The rest of the code doesn't change since Grok uses the same API format.
 
