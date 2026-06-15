@@ -74,11 +74,11 @@ Open Claude Code in this folder:
 claude .
 ```
 
-Then ask it to run the agent for you:
+Then ask Claude Code to test the setup:
 
-> *"Run agent.py with the question 'what should I pack for Boston today?' and show me the output."*
+> *"Test that my agent is working by asking it what I should pack for Boston today. Show me the tool call in the output."*
 
-You should see `-> calling tool: get_weather({'city': 'Boston'})` in the output before the final answer. If that line shows up, the loop is running correctly. This is also your first taste of what the exercise feels like -- you're asking Claude Code to do things, not running commands yourself.
+You're looking for a line that says `-> calling tool: get_weather(...)` before the final answer. That confirms the loop is wired up correctly. This is also your first taste of the exercise -- you're describing what you want and letting Claude Code figure out how to do it.
 
 Using OpenAI instead? Set `OPENAI_API_KEY` and change `PROVIDER=openai` in `.env`. The rest of the code doesn't change since Grok uses the same API format.
 
