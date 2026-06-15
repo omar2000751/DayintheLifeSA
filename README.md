@@ -1,117 +1,143 @@
-# Agent Starter — Build Your First AI Agent in 30 Minutes
+# Build Your First AI Agent
 
-A follow-along repo for the **"Day in the Life of a Solutions Architect"** session.
-You'll use **Claude Code** to build a small but real AI **agent**: an LLM in a loop
-that decides when to call tools, calls them, reads the results, and answers.
+You're here because you just sat through the **"Day in the Life of a Solutions Architect"** session. This repo is what comes next — you're going to build something real.
 
-By the end you'll have:
-- a working agent loop (the thing under every "AI agent")
-- two real tools the model can call
-- a guardrail that keeps the agent in its lane
-- a committed git repo you can show off
+Not a tutorial app. Not a demo. An actual AI **agent**: a program that reasons, decides which tools to call, calls them, reads the results, and keeps going until it has an answer. This exact pattern is what's powering every AI product you've heard of in the last 12 months.
 
-This is a miniature of the agent you'll build for your capstone. Same muscles.
+By the end of this exercise (30 minutes), you'll have:
+- A running agent loop you wrote and understand
+- Two tools the model can call and chain together
+- A guardrail that keeps the agent from going off the rails
+- Code committed to a repo you own
 
----
-
-## The big idea (read this once, 60 seconds)
-
-An **agent** is not magic. It's a loop:
-
-```
-observe  ->  think  ->  act  ->  check   (repeat until done)
-```
-
-1. You give the model a list of **tools** (functions you wrote, each with a name + description).
-2. The model replies either with a final answer OR "call tool X with these arguments."
-3. Your code runs the tool, hands the result back to the model.
-4. Repeat until the model answers or you hit a step cap.
-
-That's it. The rest is detail. You'll build exactly this.
+**This is the same architecture you'll use for your capstone.** The scale will be different. The muscles are identical.
 
 ---
 
-## Setup (do this first — 5 minutes)
+## What you're actually building (read this first)
 
-You need **Python 3.10+** and a **Grok (xAI) API key** — it's free. Grab one at
-https://console.x.ai (sign in, create an API key). Grok is OpenAI-compatible, so
-this same code works with OpenAI too if you'd rather.
+Most people think AI is a black box. It's not. Under every "AI agent" is a loop that looks like this:
+
+```
+user message
+     ↓
+  model thinks
+     ↓
+  "I need to call a tool"  →  your code runs the tool  →  result goes back to model
+     ↓
+  model thinks again
+     ↓
+  final answer
+```
+
+The model doesn't run your tools — **you do.** The model just decides *when* to ask for one and *what arguments* to pass. Your code is the one actually executing things and handing results back. Once that clicks, the whole space of "AI agents" becomes much less mysterious.
+
+What you're building today:
+- `agent.py` — the loop itself. Sends messages to the model, checks if it wants to call a tool, runs the tool, loops back.
+- `tools.py` — the actual tool functions. Just normal Python. The model never sees this code, only the description you write for it.
+
+That's genuinely it.
+
+---
+
+## Setup
+
+You need **Python 3.10+** and an API key. We're using **Grok (xAI)** — it's free, no credit card, takes 2 minutes to get a key.
+
+**Step 1: Get your API key**
+
+Go to [console.x.ai](https://console.x.ai) → sign in → create an API key. Copy it. You'll need it in a moment.
+
+> **No key right now?** That's fine. Set `USE_MOCK=1` in your `.env` and the agent will run with a fake model. You won't get real AI responses but the loop still works and the architecture lesson is the same. Come back and swap in a real key when you have one.
+
+**Step 2: Clone and install**
 
 ```bash
-# 1. clone your fork
-git clone <your-fork-url> agent-starter
+git clone https://github.com/omar2000751/DayintheLifeSA.git agent-starter
 cd agent-starter
 
-# 2. make a virtualenv
 python -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
+source .venv/bin/activate     # Windows: .venv\Scripts\activate
 
-# 3. install deps
 pip install -r requirements.txt
-
-# 4. set your key
-cp .env.example .env
-# then edit .env: paste your key into XAI_API_KEY
 ```
 
-Provider options in `.env`:
-- **Grok / xAI (default):** set `XAI_API_KEY` (free at console.x.ai)
-- **OpenAI:** set `OPENAI_API_KEY` and `PROVIDER=openai`
+**Step 3: Wire up your key**
 
-No key handy? You can still build and run the whole thing in **mock mode**
-(`USE_MOCK=1` in `.env`) — the agent runs with a fake model so the architecture
-lesson works even offline.
+```bash
+cp .env.example .env
+```
+
+Open `.env` and paste your key into `XAI_API_KEY`. Leave everything else as-is.
+
+**Step 4: Verify it works**
+
+```bash
+python agent.py "what should I pack for Boston today?"
+```
+
+You should see the agent call the `get_weather` tool, get a result back, and give you a final answer. If you see that tool call printed — you're good, the loop is working.
+
+> **Using OpenAI instead of Grok?** Set `OPENAI_API_KEY` and change `PROVIDER=openai` in your `.env`. The rest of the code is identical — Grok uses the same API format.
 
 ---
 
-## The exercise — let Claude Code do the building
+## The exercise
 
-You will mostly **prompt Claude Code**, not hand-type code. That's the point:
-you're directing an agent to build an agent.
+You're going to use **Claude Code** to extend this agent, not hand-type everything from scratch. That's intentional — the skill we're building is knowing *what* to ask an AI to build, not grinding out boilerplate. Open Claude Code in this folder (`claude .`) and follow the steps below. Each one has a prompt you can paste directly.
 
-Open Claude Code in this folder and work through the steps. Each step has a
-copy-paste prompt. The finished reference code is in `agent.py` if you get stuck.
+---
 
-### Step 1 — Make the loop real (8 min)
-> Prompt Claude Code:
-> "Open agent.py. It has a tool-calling loop with one fake tool, get_weather.
-> Walk me through how the loop works line by line, then run it with the
-> question 'what should I pack for Boston today?' and show me the tool call."
+### Step 1 — Understand the loop (8 min)
 
-You're looking for: the model decides to call `get_weather`, you see the result
-go back in, then a final answer. That's the agent loop.
+Before you change anything, you need to know what's actually happening.
 
-### Step 2 — Add a real tool (8 min)
-> Prompt Claude Code:
-> "Add a second tool called save_note(text) that appends a line to notes.txt.
-> Then ask the agent to look up the weather and save a one-line summary to my notes."
+> **Paste this into Claude Code:**
+> *"Open agent.py and walk me through the agent loop line by line. Explain what happens when the model decides to call a tool versus when it gives a final answer. Then run it with the question 'what should I pack for Boston today?' and show me the tool call in the output."*
 
-Now the agent **chains two tools**: read something, then write something.
+**What to look for:** You should see `-> calling tool: get_weather({'city': 'Boston'})` printed before the final answer. That's the moment your code intercepted the model's tool request, ran your Python function, and handed the result back. That's the whole game.
 
-### Step 3 — Add a guardrail (7 min)
-> Prompt Claude Code:
-> "Add two guardrails: the agent should politely refuse anything not about
-> weather or notes, and save_note must reject text longer than 500 characters.
-> Tell me which guardrail you put in the prompt and which you put in code, and why."
+---
 
-This is the real lesson: some rules live in the prompt, hard limits live in code.
+### Step 2 — Add a tool that writes (8 min)
+
+Right now the agent can only *read* (fake weather data). Make it write too.
+
+> **Paste this into Claude Code:**
+> *"Add a second tool called save_note(text) that appends a timestamped line to notes.txt. Add it to TOOL_SCHEMAS and TOOL_FUNCTIONS in tools.py. Then ask the agent: 'Check the weather in Boston and save a one-line summary to my notes.' Show me the notes.txt output."*
+
+**What to look for:** The agent should call `get_weather` first, then call `save_note` with the result. Two tool calls, chained automatically. The model decided the order — you didn't program that logic.
+
+---
+
+### Step 3 — Add guardrails (7 min)
+
+A capable agent without guardrails is a liability. There are two kinds of guardrails and they live in different places for a reason.
+
+> **Paste this into Claude Code:**
+> *"Add two guardrails: (1) the agent should politely refuse any request that isn't about weather or notes — put this in the system prompt, (2) save_note should hard-reject any text longer than 500 characters with an error — put this in the Python function. After implementing both, explain to me in a comment why each guardrail lives where it does."*
+
+**What to look for:** This is the real lesson. Behavioral rules ("be helpful but stay on topic") belong in the prompt because they're fuzzy and contextual. Hard limits ("never write more than 500 chars") belong in code because the model should never be able to talk its way around them.
+
+---
 
 ### Step 4 — Ship it (5 min)
-> Prompt Claude Code:
-> "Update the README's 'What I built' section to describe my agent, then commit
-> everything to git with a sensible message."
 
-Done. You built and shipped an agent.
+> **Paste this into Claude Code:**
+> *"Fill in the 'What I built' section of the README with a 3-4 sentence description of this agent — what it does, what tools it has, and what guardrails protect it. Then commit everything to git with a clear message."*
+
+You built and shipped an agent. That's not nothing.
 
 ---
 
-## Stretch goals (if you finish early)
+## Stretch goals
 
-- **Add an MCP server** so your agent gets a tool you didn't have to write:
-  `claude mcp add fetch -- uvx mcp-server-fetch` then ask the agent to read a web page.
-- **Package it as a Claude Code skill** in `.claude/skills/` so the behavior is reusable.
-- **Write your own tool**: pick anything (dice roller, stock price, unit converter)
-  and have the agent call it.
+Done early? Pick one:
+
+- **Connect a real weather API.** Replace the hardcoded `get_weather` with a call to [wttr.in](https://wttr.in) (no key needed: `curl wttr.in/Boston?format=3`). Now your agent has real data.
+- **Add an MCP server.** Run `claude mcp add fetch -- uvx mcp-server-fetch` and ask the agent to read a webpage. You just gave it a tool you didn't write.
+- **Write a tool of your own.** Dice roller, unit converter, file reader — anything. Add the schema and the function. Ask the agent to use it.
+- **Package it as a Claude Code skill.** The `.claude/skills/` folder is already set up. Flesh out the research-agent skill so it can be invoked as a slash command.
 
 ---
 
@@ -121,15 +147,15 @@ _(You'll fill this in at Step 4.)_
 
 ---
 
-## How the files fit together
+## File map
 
 ```
 agent-starter/
-├── README.md            <- this guide
-├── requirements.txt     <- dependencies
-├── .env.example         <- copy to .env, add your key
-├── agent.py             <- the agent loop + tools (you extend this)
-├── tools.py             <- tool functions live here
+├── agent.py             ← the loop: sends messages, runs tools, loops back
+├── tools.py             ← tool functions + their schemas (what the model sees)
+├── requirements.txt     ← openai SDK + dotenv, that's it
+├── .env.example         ← copy to .env, add your key
 └── .claude/
-    └── skills/          <- (stretch) package your agent as a skill
+    └── skills/
+        └── research-agent/   ← stretch goal skill starter
 ```
